@@ -23,6 +23,8 @@ crash the whole screen, and one bad change can leave a setup you can't fix.
 - **Only believe what was tested.** Every claim is labelled `verified`, `partial`, `unverified`,
   `not tested` or `blocked`, and backed by evidence in `reports/`.
 
+![flmint architecture: flmint launches the pinned Wine runner, which runs FL Studio in a sandboxed prefix; picture goes out through Xorg/NVIDIA, sound through PipeASIO and PipeWire to the Scarlett](docs/flmint-architecture.png)
+
 ## How it works (methodology)
 
 1. **Look first.** `flmint doctor` inventories the machine (OS, GPU, PipeWire, Wine, disk) without changing
