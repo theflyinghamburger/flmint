@@ -1,4 +1,4 @@
-"""flmint CLI: doctor | plan | install (--dry-run enforced) | stubs for later phases."""
+"""flmint CLI: doctor | plan | install (--dry-run enforced) | launch/stop | new-project | snapshots."""
 
 from __future__ import annotations
 
@@ -29,10 +29,12 @@ from .installer_runner import perform_install, render_dry_run
 from .manifest import Component, Profile, load_profile_file
 from .planner import Plan, build_plan, render_plan
 from .probe import CommandProber
-from .runtime_launcher import launch
+from .projects import DEFAULT_TEMPLATE, list_templates, new_project, render_new_project
+from .runtime_launcher import build_spec, render_spec, runner_root, running_pids, start, stop
 from .snapshots import (
     create_snapshot,
     list_snapshots,
+    prefix_path,
     render_created,
     render_list,
     render_restore,
@@ -113,8 +115,31 @@ def build_parser() -> argparse.ArgumentParser:
     fetch.add_argument("--extract", action="store_true")
     fetch.add_argument("--provenance", help="repo-relative provenance report path")
 
-    launch_p = sub.add_parser("launch", help="Phase 2 stub")
-    launch_p.add_argument("--profile", default="stable")
+    launch_p = sub.add_parser(
+        "launch", help="start FL Studio in the profile prefix (needs --approve and a snapshot choice)"
+    )
+    launch_p.add_argument("--profile", default="experimental")
+    launch_p.add_argument("--profile-file")
+    launch_p.add_argument("--project", help="existing .flp to open (opened read-only by flmint)")
+    launch_p.add_argument("--dry-run", action="store_true", help="validate and print argv/env; run nothing")
+    launch_p.add_argument("--approve", action="store_true")
+    snap = launch_p.add_mutually_exclusive_group()
+    snap.add_argument("--snapshot", metavar="NAME", help="create this prefix snapshot before launching")
+    snap.add_argument("--no-snapshot", action="store_true", help="launch without a pre-launch snapshot")
+    launch_p.add_argument("--wine-debug", default="-all", help="WINEDEBUG channels (default: -all)")
+    launch_p.add_argument("--pipeasio-debug", action="store_true", help="set PIPEASIO_DEBUG=1")
+
+    stop_p = sub.add_parser("stop", help="kill everything in the profile prefix (runner wineserver -k)")
+    stop_p.add_argument("--profile", default="experimental")
+    stop_p.add_argument("--profile-file")
+
+    new_p = sub.add_parser(
+        "new-project", help="copy an FL Studio template to ~/.local/share/flmint/projects/NAME.flp"
+    )
+    new_p.add_argument("name", nargs="?", help="plain project name, e.g. my-song")
+    new_p.add_argument("--template", default=DEFAULT_TEMPLATE, help="Category/Name (see --list-templates)")
+    new_p.add_argument("--profile", default="experimental", help="profile whose FL install has templates")
+    new_p.add_argument("--list-templates", action="store_true")
 
     snapshot_p = sub.add_parser(
         "snapshot", help="prefix snapshots (managed profile paths only; refuses until a prefix exists)"
@@ -250,10 +275,68 @@ def _run_verify(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_launch(args: argparse.Namespace) -> int:
+    profile = find_profile(args.profile, args.profile_file)
+    spec = build_spec(
+        profile,
+        project=Path(args.project) if args.project else None,
+        wine_debug=args.wine_debug,
+        pipeasio_debug=args.pipeasio_debug,
+    )
+    running = running_pids(spec.prefix, spec.runner)
+    print(render_spec(spec, dry_run=args.dry_run, running=running))
+    if args.dry_run:
+        return 0
+    if not args.approve:
+        raise ApprovalRequiredError(
+            "launch is refused without --approve: it runs Windows software in the prefix",
+            next_actions=(f"review first: flmint launch --profile {profile.name} --dry-run",),
+        )
+    if args.snapshot is None and not args.no_snapshot:
+        raise ApprovalRequiredError(
+            "choose --snapshot NAME (recommended before tests or prefix changes) or --no-snapshot",
+            next_actions=(f"existing snapshots: flmint snapshot list --profile {profile.name}",),
+        )
+    if running:
+        raise FlmintError(
+            f"prefix already in use by PIDs {', '.join(map(str, running))}",
+            next_actions=(f"close FL Studio, or force it: flmint stop --profile {profile.name}",),
+        )
+    if args.snapshot:
+        print(render_created(create_snapshot(profile.name, args.snapshot)))
+    pid = start(spec)
+    print(f"started PID {pid}; log {spec.log_path}")
+    print(f"  stuck dialog or hang: flmint stop --profile {profile.name}")
+    return 0
+
+
+def _run_stop(args: argparse.Namespace) -> int:
+    profile = find_profile(args.profile, args.profile_file)
+    prefix, runner = prefix_path(profile.name), runner_root(profile)
+    before = running_pids(prefix, runner)
+    if not before:
+        print(f"nothing running in profile '{profile.name}'")
+        return 0
+    code = stop(profile)
+    after = running_pids(prefix, runner)
+    print(f"wineserver -k exit {code}; {len(before)} process(es) before, {len(after)} still present")
+    return 0 if not after else 1
+
+
+def _run_new_project(args: argparse.Namespace) -> int:
+    if args.list_templates:
+        print("\n".join(list_templates(prefix_path(args.profile))))
+        return 0
+    if not args.name:
+        raise FlmintUsageError(
+            "a project NAME is required", next_actions=("example: flmint new-project my-song",)
+        )
+    print(render_new_project(new_project(args.profile, args.name, args.template), args.profile))
+    return 0
+
+
 def _run_stub(args: argparse.Namespace) -> int:
-    if args.command == "launch":
-        launch(args.profile)
-    elif args.command == "snapshot":
+    if args.command == "snapshot":
         if args.snapshot_command == "create":
             print(render_created(create_snapshot(args.profile, args.name)))
         elif args.snapshot_command == "list":
@@ -281,7 +364,13 @@ def _dispatch(args: argparse.Namespace) -> int:
         return _run_verify(args)
     if args.command == "fetch":
         return _run_fetch(args)
-    if args.command in {"launch", "snapshot", "diagnose", "bench"}:
+    if args.command == "launch":
+        return _run_launch(args)
+    if args.command == "stop":
+        return _run_stop(args)
+    if args.command == "new-project":
+        return _run_new_project(args)
+    if args.command in {"snapshot", "diagnose", "bench"}:
         return _run_stub(args)
     raise FlmintError(f"unhandled command '{args.command}'")
 

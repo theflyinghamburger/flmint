@@ -37,7 +37,8 @@ repo-relative report after `safe_relative_path` validation.
 | Command | Today's behavior | Exit |
 | --- | --- | --- |
 | `flmint install ...` (no `--dry-run`) | `ApprovalRequiredError` | `2` |
-| `flmint launch --profile stable` | `NotYetImplementedError` (Phase 2) | `2` |
+| `flmint launch` (no `--approve`, or no `--snapshot NAME` / `--no-snapshot`) | `ApprovalRequiredError` | `2` |
+| `flmint launch` with Wine running in the prefix, or `UseXRandR`/`UseXVidMode`=`N` set | refusal | `2` |
 | `flmint snapshot create --profile stable --name baseline` | `no prefix to snapshot ...` | `2` |
 | `flmint diagnose --profile stable` | `NotYetImplementedError` (Phase 2+) | `2` |
 | `flmint bench audio --profile stable` | `NotYetImplementedError` (Phase 3) | `2` |

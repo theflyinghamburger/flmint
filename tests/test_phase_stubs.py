@@ -8,7 +8,6 @@ from flmint.errors import ApprovalRequiredError, NotYetImplementedError
 from flmint.installer_runner import perform_install, render_dry_run
 from flmint.planner import GateResult, Plan, Step
 from flmint.runtime import CANDIDATE_STATUS, CANDIDATE_VERSIONS
-from flmint.runtime_launcher import launch
 
 
 def empty_plan() -> Plan:
@@ -29,7 +28,6 @@ def empty_plan() -> Plan:
 class PhaseStubsTest(unittest.TestCase):
     def test_all_future_phase_commands_refuse(self) -> None:
         calls = (
-            lambda: launch("stable"),
             lambda: collect_diagnostics("stable", "reports/x.tar.gz"),
             lambda: bench_audio("stable", 48000, "1024,512"),
             lambda: bench_ai(None, "llamacpp"),

@@ -54,8 +54,8 @@ Focused test example:
 .venv/bin/python -m pytest tests/test_cli.py::CliTest::test_install_without_dry_run_refuses
 ```
 
-Last recorded gates: `93 passed, 18 subtests passed`, `All checks passed!`,
-`Success: no issues found in 18 source files`.
+Last recorded gates: `112 passed, 29 subtests passed`, `All checks passed!`,
+`Success: no issues found in 19 source files`.
 
 ## Repository commands
 
@@ -69,7 +69,13 @@ bash scripts/collect_host_facts.sh
 .venv/bin/python -m flmint plan --profile stable
 .venv/bin/python -m flmint install --installer PATH --profile stable --dry-run
 .venv/bin/python -m flmint snapshot list --profile stable
+.venv/bin/python -m flmint launch --profile experimental --project PATH.flp --dry-run
+.venv/bin/python -m flmint new-project --list-templates
+.venv/bin/python -m flmint new-project NAME [--template Category/Name]
 ```
+
+`new-project` only writes `~/.local/share/flmint/projects/NAME.flp` (copied from a prefix template, never
+overwriting).
 
 Approval-gated managed-artifact commands, run only after explicit owner approval and when a fresh pre-action
 snapshot exists:
@@ -79,12 +85,17 @@ snapshot exists:
 .venv/bin/python -m flmint verify --profile stable --component daw-ge-proton
 .venv/bin/python -m flmint snapshot create --profile stable --name SNAPSHOT_NAME
 .venv/bin/python -m flmint snapshot restore --profile stable --name SNAPSHOT_NAME
+.venv/bin/python -m flmint launch --profile experimental --project PATH.flp --approve --snapshot SNAPSHOT_NAME
+.venv/bin/python -m flmint stop --profile experimental
 ```
 
 Expected refusal boundaries:
 
 - `install` without `--dry-run` exits `2` with `ApprovalRequiredError`.
-- `launch`, `diagnose`, and `bench` exit `2` with `NotYetImplementedError`.
+- `launch` exits `2` without `--approve`, without an explicit `--snapshot NAME` / `--no-snapshot` choice, when
+  Wine is already running in the prefix, or when the prefix sets winex11 `UseXRandR`/`UseXVidMode` to `N`.
+  `--dry-run` prints the clean env and argv and runs nothing.
+- `diagnose` and `bench` exit `2` with `NotYetImplementedError`.
 - `fetch` requires `--approve`.
 - `snapshot create` refuses until a prefix exists.
 - `snapshot restore` verifies the archive SHA-256, extracts only a single `prefix` tree into staging, and
@@ -96,6 +107,8 @@ Expected refusal boundaries:
 - Profile loading and pin validation: `src/flmint/manifest.py`, `profiles/stable.yaml`, and example profiles.
 - Side-effect boundary: `src/flmint/installer_runner.py`; `perform_install()` is an intentional refusal.
 - Snapshot implementation: `src/flmint/snapshots.py`.
+- Launch/stop (clean env, preflight, detached start): `src/flmint/runtime_launcher.py`; templates and
+  `new-project`: `src/flmint/projects.py`. `profiles/experimental.yaml` pins the runner + PipeASIO in use.
 - Managed-path and safe-write helpers: `src/flmint/state.py`.
 - Host probes use bounded argv subprocess calls, no shell, and record absent tools as facts.
 - Tests use `tests/helpers.py` fake probers and fixtures; `FLMINT_OS_RELEASE` is the test-only os-release hook.
@@ -116,7 +129,9 @@ Expected refusal boundaries:
 - Accepted experimental PipeASIO setting is 256 fixed samples: `buffer_size=256`, `fixed_buffer_size=on`, and
   `sample_rate=0` in `~/.config/pipeasio/config.ini`.
 - Final accepted PipeASIO launch and clean-stop commands are stored in `reports/pipeasio-experimental.md`. Use a
-  supervised manual launch only after approval and a fresh pre-test snapshot; `flmint launch` is still a stub.
+  supervised manual launch only after approval and a fresh pre-test snapshot. `flmint launch` now builds that
+  same environment; real launch + `flmint stop` `verified` 2026-11-05 (project opened, owner-confirmed;
+  18 processes stopped).
 - Check `flmint snapshot list --profile experimental` before prefix mutation. The **golden** experimental snapshot is
   `golden-2026-11-05` (read-only hard link of `pre-reopen-test-2026-11-04`, sha256 `f8d0ef47...86b5b`): the last
   state proven by a successful run (FLEX loads, path-launch save/reopen verified). It includes the XRandR-key

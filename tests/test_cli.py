@@ -95,11 +95,15 @@ class CliTest(unittest.TestCase):
         self.assertIn("no mutations performed", out)
         self.assertEqual(err, "")
 
-    def test_launch_stub_refuses(self) -> None:
-        code, _, err = self.run_cli(["launch", "--profile", "stable"])
+    def test_launch_refuses_without_prefix(self) -> None:
+        code, _, err = self.run_cli(["launch", "--profile", "stable", "--dry-run"])
         self.assertEqual(code, 2)
-        self.assertIn("not implemented", err)
-        self.assertIn("WINEPREFIX", err)
+        self.assertIn("no prefix for profile 'stable'", err)
+
+    def test_new_project_requires_name(self) -> None:
+        code, _, err = self.run_cli(["new-project"])
+        self.assertEqual(code, 2)
+        self.assertIn("NAME is required", err)
 
     def test_snapshot_create_refuses_without_prefix(self) -> None:
         code, _, err = self.run_cli(["snapshot", "create", "--profile", "stable", "--name", "before-install"])

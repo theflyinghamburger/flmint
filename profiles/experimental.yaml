@@ -1,0 +1,42 @@
+# flmint experimental profile — records what the live experimental prefix actually uses (2026-11-05).
+# Both pins were approved and applied on 2026-11-03: the runner is the stable profile's D2 runner, and
+# PipeASIO v1.10.0 was fetched, digest-matched and registered in this prefix (reports/pipeasio-experimental.md).
+# Golden snapshot: golden-2026-11-05. Bottles/WineASIO candidates stay in experimental.example.yaml.
+name: experimental
+title: Experimental FL Studio on the pinned runner with PipeASIO (isolated prefix)
+description: "Second isolated prefix driven by the pinned DAW-GE-Proton runner with PipeASIO at 256 fixed samples. Never the production environment; snapshot before and after each change."
+installer_required: true
+min_disk_mib: 16384
+components:
+  - id: daw-ge-proton
+    kind: download
+    name: DAW-GE-Proton
+    version: DAW-GE-Proton11-6c
+    source_url: https://github.com/KitsuneDev/daw-proton-ge/releases
+    sha256: aecf59518c1137028f6c47afc8e497064d6c5d0f206df6ea6d385dd0766f02d5
+    license: GPL-3.0
+    asset: DAW-GE-Proton11-6c.tar.gz
+    download_url: https://github.com/KitsuneDev/daw-proton-ge/releases/download/DAW-GE-Proton11-6c/DAW-GE-Proton11-6c.tar.gz
+    size_bytes: 553597099
+    notes: "Same pinned runner as profiles/stable.yaml (D2). Launching wine directly skips the proton script, so the prefix needs the vkd3d DLLs in system32/syswow64 and the runner fonts linked (applied 2026-11-04)."
+  - id: pipeasio
+    kind: download
+    name: PipeASIO
+    version: v1.10.0
+    source_url: https://github.com/M0n7y5/pipeasio
+    sha256: 54f959381e1a60f05d0e3b662ed09b08d444d3161a248cd9964c23f47b057a5b
+    license: GPL-3.0
+    asset: pipeasio-v1.10.0-archlinux-x86_64.tar.gz
+    download_url: https://github.com/M0n7y5/pipeasio/releases/download/v1.10.0/pipeasio-v1.10.0-archlinux-x86_64.tar.gz
+    size_bytes: 1003895
+    notes: "Installed to ~/.local/lib/wine and registered in this prefix only. Its presence here makes flmint launch set WINEDLLPATH=$HOME/.local/lib/wine. Accepted config: buffer_size=256, fixed_buffer_size=on, sample_rate=0."
+gates:
+  - id: pipewire-ge-1.4.2
+    kind: pipewire_min
+    min_version: 1.4.2
+    applies_to: pipeasio
+human_checklist:
+  - Snapshot the experimental prefix before every audio-bridge or prefix change.
+  - Register ASIO DLLs per-prefix only; never system-wide.
+  - Measure (never assume) latency and XRUN behavior at 1024/512/256 frames.
+  - "Never set winex11 UseXRandR/UseXVidMode to N on this host (crashed Xorg 2026-11-04); flmint launch refuses it."

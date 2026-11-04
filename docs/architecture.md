@@ -1,13 +1,13 @@
 # Architecture
 
-`flmint` is a planning/verification toolkit, not a launcher and not an installer. Everything that
-mutates the host is behind an explicit refusal today.
+`flmint` is a planning/verification toolkit with an approval-gated launcher; it is not an installer.
+Everything that mutates the host is behind an explicit refusal or an `--approve` flag.
 
 ## Module map (`src/flmint/`)
 
 | Module | Role | Status |
 | --- | --- | --- |
-| `cli.py` | argparse surface: `doctor`, `plan`, `install`, `launch`, `snapshot`, `diagnose`, `bench`; converts `FlmintError` into exit code 2 with `next action:` lines | implemented |
+| `cli.py` | argparse surface: `doctor`, `plan`, `install`, `fetch`, `verify`, `launch`, `stop`, `new-project`, `snapshot`, `diagnose`, `bench`; converts `FlmintError` into exit code 2 with `next action:` lines | implemented |
 | `probe.py` | `CommandProber`: subprocess wrapper with timeouts, argv lists (no shell), graceful "absent" results | implemented, tested |
 | `doctor.py` | read-only host facts (`HostFacts`): os-release, kernel, CPU/memory, disk, GPU/driver/CUDA, audio stack, Flatpak/Wine/Docker presence, blockers/warnings | implemented, tested |
 | `installer.py` | read-only installer validation: streaming SHA-256, minimal PE header parse (`pe_arch`, magic, subsystem), NSIS engine sniffing | implemented, tested |
@@ -19,7 +19,9 @@ mutates the host is behind an explicit refusal today.
 | `audio.py` | PipeWire/PipeASIO gate constant (`PIPEWIRE_PIPEASIO_MIN = 1.4.2`) + audio facts helpers | implemented |
 | `state.py` | `safe_relative_path` (refuses traversal/absolute), `atomic_write_text` | implemented, tested |
 | `errors.py` | `FlmintError`, `FlmintUsageError`, `ManifestError`, `ProbeError`, `ApprovalRequiredError`, `SnapshotError`, `NotYetImplementedError` | implemented |
-| `runtime_launcher.py`, `diagnostics.py`, `benchmarks.py` | Phase 2/3/5 stubs raising `NotYetImplementedError` | stubs (intentional) |
+| `runtime_launcher.py` | `build_spec` (clean env + argv, preflight: prefix, pinned runner, X11 hazard refusal, vkd3d/font warnings), `running_pids`, detached `start`, `stop` (`wineserver -k`) | implemented, tested; real launch + stop `verified` 2026-11-05 |
+| `projects.py` | FL install/template discovery, `new_project` (no-clobber copy into `~/.local/share/flmint/projects`) | implemented, tested |
+| `diagnostics.py`, `benchmarks.py` | Phase 2/3/5 stubs raising `NotYetImplementedError` | stubs (intentional) |
 
 ## Control flow
 
@@ -28,7 +30,10 @@ doctor  -> HostFacts (facts + blockers + warnings)
 plan    -> HostFacts + Profile(+ optional InstallerInfo) -> Plan (steps/gates/blockers/warnings)
 install --dry-run -> render_dry_run(Plan)          # no mutation
 install           -> ApprovalRequiredError          # always, by design
-launch/diagnose/bench -> NotYetImplementedError     # Phase 2/3/5 boundary
+launch  -> build_spec (no exec) -> --dry-run prints | --approve + snapshot choice -> start (detached)
+stop    -> runner wineserver -k (prefix-scoped)
+new-project -> copy template into managed projects dir (no clobber)
+diagnose/bench -> NotYetImplementedError            # Phase 2/3/5 boundary
 snapshot create/list/restore -> managed-state writes only, refuses without a prefix
 ```
 
@@ -57,7 +62,6 @@ snapshot create/list/restore -> managed-state writes only, refuses without a pre
 
 - No download/verification engine yet: `flmint` plans downloads and records digests, it does not
   fetch them.
-- No Wine/Proton invocation layer yet: `launch` is a stub by policy.
 - No audio measurement yet: `bench audio` is a stub; `wpctl`/`pw-dump` facts are collected but not
   analyzed.
 - No diagnostics bundle yet: `diagnose` is a stub; the plan already reserves

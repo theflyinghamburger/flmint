@@ -23,8 +23,8 @@ reversible. It does not install FL Studio, Wine, or any audio bridge.
   `--approve` (exit 2).
 - `flmint verify --profile ... --component ...` — re-hashes an already stored artifact with no network and
   rewrites its provenance record.
-- Unit tests, `ruff`, `mypy`: `93 passed, 18 subtests passed` / `All checks passed!` /
-  `Success: no issues found in 18 source files`.
+- Unit tests, `ruff`, `mypy`: `112 passed, 29 subtests passed` / `All checks passed!` /
+  `Success: no issues found in 19 source files`.
 
 ## Implemented but not yet exercised on real hardware
 
@@ -35,9 +35,14 @@ reversible. It does not install FL Studio, Wine, or any audio bridge.
   is the Phase 2 boundary, not a missing feature.
 - `flmint snapshot restore` against a real Wine prefix (staging + swap + `prefix.discarded-*` rollback): the
   prefix exists, multiple restore round-trips were exercised during 2.4, and rollback copies remain pending
-  operator deletion. `flmint launch`, `diagnose`, `bench` and `install` without `--dry-run` still refuse.
+  operator deletion. `flmint diagnose`, `bench` and `install` without `--dry-run` still refuse.
   Full evidence: `reports/runner-install-phase2.md`.
-- Phase stubs — `launch`, `diagnose`, `bench audio`, `bench ai` raise `NotYetImplementedError`.
+- `flmint launch` — starts FL Studio with the pinned runner in a clean environment (explicit `WINEPREFIX`,
+  PipeASIO `WINEDLLPATH` when the profile carries it), optional `--project PATH.flp`; needs `--approve` plus
+  `--snapshot NAME` or `--no-snapshot`; `--dry-run` executes nothing. `flmint stop` runs the runner's
+  `wineserver -k`. `flmint new-project NAME` copies an FL template to `~/.local/share/flmint/projects/`.
+  Use these instead of File > Open / Save As, which hang under this runner (Wine itemdlg bug).
+- Phase stubs — `diagnose`, `bench audio`, `bench ai` raise `NotYetImplementedError`.
 
 ## Requires human approval before it can happen
 
@@ -81,7 +86,7 @@ python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
 .venv/bin/mypy
 ```
 
-`install` without `--dry-run`, `launch`, `diagnose`, and `bench` intentionally exit `2` with a message
+`install` without `--dry-run`, `launch` without `--approve`, `diagnose`, and `bench` intentionally exit `2` with a message
 and `next action:` hints.
 
 ## Docs
