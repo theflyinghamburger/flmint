@@ -1,0 +1,3 @@
+pipewire
+Compiled with libpipewire 1.0.0
+Linked with libpipewire 1.0.0

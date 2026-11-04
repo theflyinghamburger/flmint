@@ -1,0 +1,7 @@
+NAME="Linux Mint"
+VERSION="22.3 (Xfce)"
+ID=linuxmint
+ID_LIKE="ubuntu debian"
+VERSION_ID="22.3"
+UBUNTU_CODENAME=noble
+LINUXMINT_VERSION="22.3"

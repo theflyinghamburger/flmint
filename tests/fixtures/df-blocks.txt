@@ -1,0 +1,2 @@
+Filesystem     1B-blocks        Used  Available Use% Mounted on
+/dev/sdc4      244775477248 44040192000 188544667648  19% /

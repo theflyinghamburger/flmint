@@ -1,0 +1,8 @@
+PRETTY_NAME="Ubuntu 26.10"
+NAME="Ubuntu"
+VERSION_ID="26.10"
+VERSION="26.10 (Stonking Stingray)"
+VERSION_CODENAME=stonking
+ID=ubuntu
+ID_LIKE=debian
+SUPPORT_URL="https://help.ubuntu.com/"

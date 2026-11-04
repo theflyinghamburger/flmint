@@ -1,0 +1,32 @@
+# flmint stable profile — pins approved 2026-11-03 (see reports/decisions.md D1-D3).
+# Architecture (D1=b): one pinned native Proton runner under ~/.local/opt/flmint/<runner>/<version>
+# with a project-managed prefix. Flatpak Bottles is intentionally absent: PipeASIO upstream documents
+# Flatpak/Bottles as unsupported, and this profile never writes into another app's data dir.
+# The digests below were read from upstream release metadata over HTTPS and are recorded in
+# reports/upstream-candidates.json. Status 2026-11-03: the runner artifact **is** fetched, digest-matched and
+# extracted (approvals 1-2); the isolated prefix and the `baseline` snapshot exist (approval 3 + D5 option
+# (a)). No installer has been run and nothing has been activated.
+name: stable
+title: Stable FL Studio on a pinned native Proton runner (isolated prefix)
+description: "Isolated flmint prefix driven by the pinned DAW-GE-Proton runner with FL Studio built-in ASIO as the audio baseline. No Bottles, no patched Wine, no distro Wine, no experimental audio bridges."
+installer_required: true
+min_disk_mib: 12288
+components:
+  - id: daw-ge-proton
+    kind: download
+    name: DAW-GE-Proton
+    version: DAW-GE-Proton11-6c
+    source_url: https://github.com/KitsuneDev/daw-proton-ge/releases
+    sha256: aecf59518c1137028f6c47afc8e497064d6c5d0f206df6ea6d385dd0766f02d5
+    license: GPL-3.0
+    asset: DAW-GE-Proton11-6c.tar.gz
+    download_url: https://github.com/KitsuneDev/daw-proton-ge/releases/download/DAW-GE-Proton11-6c/DAW-GE-Proton11-6c.tar.gz
+    size_bytes: 553597099
+    notes: "Approved runner (D2). Digest + size recorded from upstream release metadata, re-confirmed against the GitHub release API, and re-verified after fetch: SHA-256 aecf5951...f02d5 matched exactly (reports/provenance-daw-ge-proton.json). The tarball has a top-level directory of the same name, so the effective runner root is ~/.local/opt/flmint/daw-ge-proton/DAW-GE-Proton11-6c/DAW-GE-Proton11-6c (use files/bin/wine + files/bin/wineserver there; there is no wine64/wine32). Measured 2026-11-03: bundled Wine is wine-11.0 (Staging), multilib (i386 + x86_64 trees), which requires the host 32-bit loader /lib/ld-linux.so.2 (D5 option (a): libc6-i386 2.44-1ubuntu2). WinTrust behavior and PipeASIO compatibility remain unverified."
+  # Installer provenance is pinned in reports/decisions.md (D3), not as a downloadable component:
+  # flmint never downloads installers; the operator supplies the official .exe path.
+human_checklist:
+  - "D3 accepted this installer path; re-hash ~/Downloads/flstudio_win64_26.1.7.5654.exe before use and match it to 6ddf9f23a8a0d2f9b8b11b77b831fed09231586899faa185e1026cc0eea4edca."
+  - "Approvals 1-3 (pinned plan, runner fetch, prefix creation) plus D5 option (a) were granted 2026-11-03; the supervised installer run (2.4) and any activation still need their own approval."
+  - "Take a baseline snapshot immediately after prefix creation, and snapshot again before every prefix mutation."
+  - "Activation, save/reopen and offline WAV export remain blocked until a legitimately unlocked Image-Line license path is supplied (D4 unanswered)."

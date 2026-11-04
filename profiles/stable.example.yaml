@@ -1,0 +1,30 @@
+# flmint stable profile (example). All versions start as null: pin exact release +
+# SHA-256 after manual upstream review (HANDOFF.md sections 4 and 10.4) before any install.
+# flmint never installs these automatically; plan/install --dry-run only enumerate them.
+name: stable
+title: Stable FL Studio via an isolated Bottles/Wine prefix
+description: "Isolated prefix with a pinned runner and FL Studio built-in ASIO as the audio baseline. No patched Wine, no system-wide overrides, no experimental audio bridges."
+installer_required: true
+min_disk_mib: 12288
+components:
+  - id: bottles
+    kind: flatpak
+    name: com.usebottles.bottles
+    version: null
+    source_url: https://flathub.org/apps/com.usebottles.bottles
+    sha256: null
+    license: GPL-3.0-only
+    notes: "Flathub 67.5 verified (GPL-3.0-only). Not installed on this host; --user install only after approval." 
+  - id: daw-ge-proton
+    kind: download
+    name: DAW-GE-Proton
+    version: null
+    source_url: https://github.com/KitsuneDev/daw-proton-ge/releases
+    sha256: null
+    license: GPL-3.0
+    notes: "Candidate runner. Candidate tag DAW-GE-Proton11-6c + digest recorded in reports/upstream-candidates.json; license unverified; pin in this profile only after review." 
+human_checklist:
+  - Download the official FL Studio Windows installer from image-line.com and record its SHA-256.
+  - Review flmint plan output and explicitly approve each [approval]-flagged step.
+  - Perform Image-Line activation with your own account inside the isolated prefix.
+  - Confirm save/reopen of a non-private test project and one offline WAV export (Phase 2 gate).

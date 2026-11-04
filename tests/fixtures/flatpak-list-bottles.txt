@@ -1,0 +1,3 @@
+Bazaar translations	io.github.kolunmi.Bazaar.Locale		stable	system
+Bottles	com.usebottles.bottles		stable	system
+gnome platform translations	org.gnome.Platform.Locale		51	system

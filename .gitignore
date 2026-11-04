@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+build/
+dist/
+src/flmint.egg-info/
+# Machine audit output stays local by default (see HANDOFF.md section 6).
+reports/

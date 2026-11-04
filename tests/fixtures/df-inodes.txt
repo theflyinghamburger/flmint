@@ -1,0 +1,2 @@
+Filesystem        Inodes    IUsed     IFree IUse% Mounted on
+/dev/sdc4       15228928   534573  14694355    4% /
