@@ -1,109 +1,148 @@
 # flmint
 
-Non-destructive planning and verification toolkit for running FL Studio on Linux through isolated
-Wine/Proton prefixes and pinned compatibility runtimes. It plans, verifies, and makes prefix changes
-reversible. It does not install FL Studio, Wine, or any audio bridge.
+Run FL Studio (a Windows music app) on Linux without risking the computer it runs on.
 
-## What works today (executed and verified on this host)
+## The idea, explained simply
 
-- `flmint doctor` — read-only host inventory (`text` and `json`), non-root, no mutation, graceful
-  handling of absent tools. Audit saved to `reports/host-audit.json`. `doctor --compare` compares current
-  facts with a saved audit JSON and exits `1` on material host/capability/blocker drift.
-- Installer validation — streaming SHA-256, PE header parse, **NSIS installer-stub detection**
-  (`installer_engine: nsis`), no execution.
-- `flmint plan` — deterministic, side-effect-free plan from a profile: gates (PipeWire ≥ 1.4.2),
-  ordered steps flagged `[auto]` / `[approval]` / `[BLOCKED]`, blockers, warnings, next actions.
-- `flmint install --dry-run` — the same plan rendered as an install preview, `(no mutations performed)`.
-- `flmint snapshot list` — reports managed snapshots without creating state. The live stable profile has
-  `baseline`, pre-installer, and post-install snapshots.
-- `flmint fetch --profile stable --component daw-ge-proton --approve [--extract]` — digest-gated fetch of a
-  profile-pinned artifact into `~/.local/opt/flmint/<component>/`: pinned `size_bytes` + SHA-256 enforced
-  while streaming, a digest mismatch quarantines the file and extracts nothing, `tarfile` `filter="data"`
-  extraction, and a provenance record with the signed CDN redirect query stripped. Refuses without
-  `--approve` (exit 2).
-- `flmint verify --profile ... --component ...` — re-hashes an already stored artifact with no network and
-  rewrites its provenance record.
-- Unit tests, `ruff`, `mypy`: `112 passed, 29 subtests passed` / `All checks passed!` /
-  `Success: no issues found in 19 source files`.
+FL Studio is built for Windows. Linux can run Windows programs through **Wine**, a translator that turns
+Windows requests into Linux ones. Wine is not perfect, though. Some versions break things, some settings
+crash the whole screen, and one bad change can leave a setup you can't fix.
 
-## Implemented but not yet exercised on real hardware
+`flmint` is a careful helper that sets FL Studio up on Linux and keeps it safe. Think of it like this:
 
-- `flmint snapshot create` / `restore` — archive + SHA-256 verification, staging extraction, preserved
-  `prefix.discarded-*` rollback, disk headroom checks. Unit-tested and exercised against the managed Wine prefix
-  during the 2.4 retry path.
-- `flmint install` **without** `--dry-run` — always refuses with `ApprovalRequiredError` (exit 2). This
-  is the Phase 2 boundary, not a missing feature.
-- `flmint snapshot restore` against a real Wine prefix (staging + swap + `prefix.discarded-*` rollback): the
-  prefix exists, multiple restore round-trips were exercised during 2.4, and rollback copies remain pending
-  operator deletion. `flmint diagnose`, `bench` and `install` without `--dry-run` still refuse.
-  Full evidence: `reports/runner-install-phase2.md`.
-- `flmint launch` — starts FL Studio with the pinned runner in a clean environment (explicit `WINEPREFIX`,
-  PipeASIO `WINEDLLPATH` when the profile carries it), optional `--project PATH.flp`; needs `--approve` plus
-  `--snapshot NAME` or `--no-snapshot`; `--dry-run` executes nothing. `flmint stop` runs the runner's
-  `wineserver -k`. `flmint new-project NAME` copies an FL template to `~/.local/share/flmint/projects/`.
-  Use these instead of File > Open / Save As, which hang under this runner (Wine itemdlg bug).
-- Phase stubs — `diagnose`, `bench audio`, `bench ai` raise `NotYetImplementedError`.
+- **A sandbox for each setup.** FL Studio lives in its own box (a Wine *prefix*) under
+  `~/.local/share/flmint/profiles/<profile>/prefix`. Nothing else on the computer is touched: not `~/.wine`,
+  not system Wine, and not other apps.
+- **The same translator every time.** The Wine build (the *runner*, DAW-GE-Proton) is pinned to one exact
+  version and checked against a fingerprint (SHA-256) before use. No surprise upgrades.
+- **Photos before every change.** Before changing the box, `flmint` takes a *snapshot* (a compressed
+  copy). If something breaks, restore the photo. One snapshot is marked **golden**: the last state that was
+  proven to work.
+- **Ask before doing anything big.** Downloading, installing or launching needs an explicit `--approve`.
+  `flmint` never runs `sudo` or `apt`. Anything that needs system changes is written down for a human to do.
+- **Only believe what was tested.** Every claim is labelled `verified`, `partial`, `unverified`,
+  `not tested` or `blocked`, and backed by evidence in `reports/`.
 
-## Requires human approval before it can happen
+## How it works (methodology)
 
-- Any download, `flatpak --user install`, runner extraction, or build (Wine/Proton, PipeASIO, WineASIO).
-  Executed so far under approvals (2026-11-03): pinned `DAW-GE-Proton11-6c` fetch + extraction, managed
-  prefix creation, and a digest-matched PipeASIO v1.10.0 install/register in an experimental prefix. No Flatpak
-  install or WineASIO installation has run.
-- A host 32-bit loader decision (**D5**, answered 2026-11-03 = option (a)): the multilib runner cannot
-  bootstrap a prefix without `/lib/ld-linux.so.2`. The owner ran `sudo apt install libc6-i386` personally
-  (`libc6-i386 2.44-1ubuntu2`); `flmint` never runs `sudo` or `apt`. That is the only system package change.
-- The supervised FL Studio installer run (2.4): approved and completed as a silent `/S` install; interactive
-  installer UI behavior remains unverified.
-- License activation, full `FL64.exe` save/reopen, WAV export, formal PipeASIO latency benchmarking,
-  JACK/realtime changes, and plugins remain unapproved or untested. A supervised launch/manual-auth attempt,
-  PipeASIO install/register, and supervised PipeASIO launch tests at 512 and 256 samples have been approved and
-  executed. The accepted PipeASIO setting is 256 fixed samples, with one logged XRUN warning and no user-reported
-  glitches. D4 is no longer a decision blocker, but activation/save/reopen/export still must be actually tested
-  before they can be claimed as verified.
-- Pinning exact versions + SHA-256 into profiles.
-- Installing JACK / realtime scheduling changes for the WineASIO fallback.
-- FL Studio behavior validation: full activation, save/reopen, WAV export, formal latency/XRUN benchmarking,
-  plugin compatibility, GPU behavior, AI coexistence. These remain **not verified on this host**, though PipeASIO
-  launch/select/audio startup has now been observed at 512 and 256 samples.
+1. **Look first.** `flmint doctor` inventories the machine (OS, GPU, PipeWire, Wine, disk) without changing
+   anything, and can compare against an earlier audit to spot drift.
+2. **Plan without doing.** `flmint plan` reads a *profile* (a YAML recipe in `profiles/`) and prints the
+   ordered steps, gates (for example PipeWire ≥ 1.4.2) and blockers. Nothing runs.
+3. **Fetch only what is pinned.** `flmint fetch --approve` downloads one profile-pinned file. The size and
+   SHA-256 are checked while it downloads. A mismatch is quarantined and never unpacked.
+4. **Snapshot, change, test, record.** Each change to a prefix follows the same loop: take a snapshot, make
+   one change, run a supervised test, and write the result into `reports/`. If the test fails, restore the
+   snapshot.
+5. **Launch cleanly.** `flmint launch` builds FL Studio's environment from scratch, so stray variables from
+   your shell can't leak in. It also refuses known hazards before anything starts.
 
-## Quick commands
+## Project layout
+
+```text
+src/flmint/          the tool
+  cli.py             command-line entry point (all commands below)
+  doctor.py, probe.py read-only host inventory
+  manifest.py        loads and validates profiles (pins, gates)
+  planner.py         side-effect-free plans
+  downloads.py       pinned, digest-checked fetch/verify
+  snapshots.py       create/list/restore prefix snapshots
+  runtime_launcher.py launch/stop FL Studio with a clean environment
+  projects.py        new FL projects from templates
+  state.py           safe managed-path writes
+profiles/            recipes: stable.yaml, experimental.yaml (+ *.example.yaml)
+tests/               unit tests (fake hosts, no real side effects)
+scripts/             smoke_test.sh (all gates), collect_host_facts.sh
+docs/                plan, architecture, rollback, runbook, research
+reports/             evidence from real runs (gitignored)
+```
+
+Everything `flmint` writes goes to three places in your home directory:
+
+| Path | Holds |
+| --- | --- |
+| `~/.local/share/flmint` | prefixes, snapshots, projects |
+| `~/.local/state/flmint` | logs, PID files |
+| `~/.local/opt/flmint` | pinned runners and downloads |
+
+## Profiles
+
+| Profile | What it is |
+| --- | --- |
+| `stable` | FL Studio on the pinned DAW-GE-Proton runner |
+| `experimental` | Same runner plus **PipeASIO** (low-latency audio through PipeWire, 256 fixed samples). This is the one in daily use. |
+
+## Usage
+
+Setup (Python ≥ 3.12):
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -e ".[dev]"
-
-.venv/bin/python -m flmint doctor --format text
-.venv/bin/python -m flmint doctor --format json --save reports/host-audit.json
-.venv/bin/python -m flmint doctor --compare reports/host-audit-2026-11-03-post-d5.json
-.venv/bin/python -m flmint plan --installer "$HOME/Downloads/flstudio_win64_26.1.7.5654.exe" --profile stable
-.venv/bin/python -m flmint install --installer "$HOME/Downloads/flstudio_win64_26.1.7.5654.exe" --profile stable --dry-run
-.venv/bin/python -m flmint snapshot list --profile stable
-.venv/bin/python -m flmint fetch --profile stable --component daw-ge-proton          # refuses (no --approve)
-.venv/bin/python -m flmint verify --profile stable --component daw-ge-proton        # re-hash + provenance
-
-.venv/bin/python -m pytest
-.venv/bin/ruff check src tests
-.venv/bin/mypy
+alias flmint='.venv/bin/python -m flmint'
 ```
 
-`install` without `--dry-run`, `launch` without `--approve`, `diagnose`, and `bench` intentionally exit `2` with a message
-and `next action:` hints.
+Look and plan (safe and read-only):
 
-## Docs
+```bash
+flmint doctor --format text
+flmint plan --profile stable
+flmint snapshot list --profile experimental
+```
 
-- `HANDOFF.md` — operating policy (section 10) and phase gates (section 8); `AGENTS.md` points here.
-- `docs/plan.md` — forward execution plan: blocking decisions D1-D4, Phase 2-6 task order, safe backlog.
-- `CLAUDE.md` — same project rules for Claude Code (kept in sync with `AGENTS.md`).
-- `docs/architecture.md` — modules, control flow, safety invariants.
-- `docs/rollback.md` — snapshot contract, guarantees, and known limits.
-- `docs/runbook.md` — safe commands, exit-code expectations, Phase 2 preflight checklist.
-- `docs/upstream-research.md` — verified/unverified upstream findings.
-- `docs/os-migration-decision.md` — distro decision from measured host facts.
-- `docs/compatibility-matrix.md` — host gates (measured) and FL Studio rows (all `not tested`).
-- `docs/benchmarks.md` — measurement plan and claims that are currently forbidden.
+Make music (the everyday workflow):
 
-## Status caveat
+```bash
+flmint new-project my-song                      # copies a template to ~/.local/share/flmint/projects/my-song.flp
+flmint new-project --list-templates             # pick another with --template Category/Name
 
-FL Studio full activation, save/reopen, export, formal audio latency, plugin behavior, and GPU behavior are
-**not verified** on this host. PipeASIO launch/select/audio startup has been observed at 512 and 256 samples,
-with 256 accepted for this session. A documented Windows fallback remains part of the plan.
+flmint launch --profile experimental --project ~/.local/share/flmint/projects/my-song.flp --dry-run
+flmint launch --profile experimental --project ~/.local/share/flmint/projects/my-song.flp \
+  --approve --snapshot before-my-song           # or --no-snapshot
+
+flmint stop --profile experimental              # close everything in the prefix (also unsticks a hang)
+```
+
+Inside FL Studio, **save with Ctrl+S**. Don't use File > Open or File > Save As. Under this runner those
+dialogs open off-screen and freeze FL (a Wine bug). To open a project, launch with `--project`, or use
+FL's recent-files list.
+
+Safety and maintenance:
+
+```bash
+flmint snapshot create  --profile experimental --name NAME
+flmint snapshot restore --profile experimental --name NAME   # keeps the old prefix as prefix.discarded-*
+flmint fetch  --profile stable --component daw-ge-proton --approve --extract
+flmint verify --profile stable --component daw-ge-proton
+```
+
+Commands refuse on purpose (exit `2`, with a `next action:` hint) when something is missing or unsafe:
+
+- `launch` without `--approve` or a snapshot choice
+- `launch` when Wine is already running in the prefix
+- `launch` when the prefix sets winex11 `UseXRandR`/`UseXVidMode` to `N` (that crashed Xorg on this host)
+- `install` without `--dry-run`
+- the `diagnose` and `bench` stubs
+
+## Status
+
+| Area | Status |
+| --- | --- |
+| Host inventory, plan, pinned fetch/verify, snapshots | `verified` |
+| FL Studio install (silent) in managed prefixes | `verified` |
+| `flmint launch` / `stop` / `new-project` | `verified` (2026-11-05) |
+| Save/reopen via launch-with-path + Ctrl+S | `verified` |
+| File > Open / Save As dialogs | `blocked` (Wine bug) |
+| PipeASIO audio at 256 samples | `partial`: starts and plays; formal latency not measured |
+| FLEX and Direct3D plugins (experimental prefix) | `verified` after the vkd3d DLL and Verdana fixes |
+| WAV export, recording, third-party plugins, latency benchmarks | `not tested` |
+
+Tests and linters: `bash scripts/smoke_test.sh` runs pytest, ruff and mypy.
+
+## Learn more
+
+- `AGENTS.md` / `CLAUDE.md`: rules for AI agents working on this repo (kept in sync).
+- `HANDOFF.md`: full operating policy and history.
+- `docs/plan.md`: forward plan. `docs/architecture.md`: modules and safety invariants.
+- `docs/rollback.md`: what snapshots do and don't cover. `docs/runbook.md`: commands and exit codes.
+- `docs/compatibility-matrix.md`, `docs/benchmarks.md`, `docs/upstream-research.md`,
+  `docs/os-migration-decision.md`.
